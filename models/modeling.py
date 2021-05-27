@@ -187,8 +187,8 @@ class Block(nn.Module):
 
     def forward(self, x, fix_bit=None):
         h = x
-        x = self.attention_norm(x,fix_bit=fix_bit)
-        x, weights = self.attn(x)
+        x = self.attention_norm(x)
+        x, weights = self.attn(x,fix_bit=fix_bit)
         x = x + h
 
         h = x
@@ -245,7 +245,7 @@ class Encoder(nn.Module):
             layer = Block(config, vis)
             self.layer.append(copy.deepcopy(layer))
 
-    def forward(self, hidden_states,, fix_bit=None):
+    def forward(self, hidden_states, fix_bit=None):
         attn_weights = []
         for layer_block in self.layer:
             hidden_states, weights = layer_block(hidden_states, fix_bit=fix_bit)
@@ -268,7 +268,7 @@ class Transformer(nn.Module):
 
 
 class VisionTransformer(nn.Module):
-    def __init__(self, config, img_size=224, num_classes=21843, zero_head=False, vis=False):
+    def __init__(self, config, img_size=224, num_classes=21843, zero_head=False, vis=False, target_flops=None):
         super(VisionTransformer, self).__init__()
         self.num_classes = num_classes
         self.zero_head = zero_head
@@ -278,8 +278,8 @@ class VisionTransformer(nn.Module):
         # last conv layer use fc 
         self.head = nn.Linear(config.hidden_size, num_classes)
 
-    def forward(self, x, labels=None,, fix_bit=None):
-        x, attn_weights = self.transformer(x,, fix_bit=fix_bit)
+    def forward(self, x, labels=None, fix_bit=None):
+        x, attn_weights = self.transformer(x, fix_bit=fix_bit)
         logits = self.head(x[:, 0])
 
         if labels is not None:
@@ -353,5 +353,6 @@ CONFIGS = {
     'ViT-H_14': configs.get_h14_config(),
     'R50-ViT-B_16': configs.get_r50_b16_config(),
     'testing': configs.get_testing(),
-    'ViT-L-32-8B': configs.get_l32_8bit_config(),
+    'ViT-L_32_8B': configs.get_l32_8bit_config(),
+    'ViT-B_16_8B': configs.get_b16_8bit_config(),
 }

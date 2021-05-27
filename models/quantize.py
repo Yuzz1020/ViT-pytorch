@@ -179,10 +179,17 @@ class QuantMeasure(nn.Module):
                     self.num_measured += 1
                 else:
                     momentum = self.momentum
-                self.running_zero_point.mul_(momentum).add_(
-                    qparams.zero_point * (1 - momentum))
-                self.running_range.mul_(momentum).add_(
-                    qparams.range * (1 - momentum))
+                try:
+                    self.running_zero_point.mul_(momentum).add_(
+                        qparams.zero_point * (1 - momentum))
+                    self.running_range.mul_(momentum).add_(
+                        qparams.range * (1 - momentum))
+                except:
+                    self.running_zero_point.mul_(momentum).add_(
+                        (qparams.zero_point * (1 - momentum)).squeeze())
+                    self.running_range.mul_(momentum).add_(
+                        (qparams.range * (1 - momentum)).squeeze())
+
         else:
             qparams = QParams(range=self.running_range,
                               zero_point=self.running_zero_point, num_bits=bits)
@@ -212,7 +219,7 @@ class QConv2d(nn.Conv2d):
 
         self.same_prec = same_prec
 
-        self.GradBitMean = utils.RunningMean() 
+#        self.GradBitMean = utils.RunningMean() 
 
         if self.groups == 1:
             self.prec_w = nn.Parameter(torch.tensor(0.0))
@@ -294,6 +301,7 @@ class QConv2d(nn.Conv2d):
                         raise NotImplementedError 
 
                     if grad_mean:
+                        raise NotImplementedError
                         self.GradBitMean.update(grad_bit) 
                         grad_bit = round(self.GradBitMean.avg)
 
@@ -355,7 +363,7 @@ class QLinear(nn.Linear):
         self.max_bit = max_bit
         self.min_bit = min_bit
 
-        self.GradBitMean = utils.RunningMean() 
+#        self.GradBitMean = utils.RunningMean() 
 
         self.same_prec = same_prec
         if same_prec:
@@ -404,6 +412,7 @@ class QLinear(nn.Linear):
                     raise NotImplementedError
                 
                 if grad_mean:
+                    raise NotImplementedError
                     self.GradBitMean.update(grad_bit) 
                     grad_bit = round(self.GradBitMean.avg)
 
@@ -416,6 +425,7 @@ class QLinear(nn.Linear):
                 return output
 
         else:
+            print('running with fix {} bit'.format(fix_bit))
             num_bits = fix_bit
             num_bits_weight = fix_bit
 

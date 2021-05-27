@@ -46,6 +46,12 @@ def get_b16_config():
     config.representation_size = None
     return config
 
+def get_b16_8bit_config():
+    config = get_b16_config()
+    config.fix_bit = 8
+    config.quant_opt=None
+    config.target_flops_ratio = 1 
+    return config 
 
 def get_r50_b16_config():
     """Returns the Resnet50 + ViT-B/16 configuration."""

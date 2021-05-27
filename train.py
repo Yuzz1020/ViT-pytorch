@@ -70,7 +70,7 @@ def setup(args):
     logger.info("Training parameters %s", args)
     logger.info("Total Parameter: \t%2.1fM" % num_params)
     print(num_params)
-    return args, model
+    return args, model, config
 
 
 def count_parameters(model):
@@ -138,7 +138,7 @@ def valid(args, model, writer, test_loader, global_step):
     return accuracy
 
 
-def train(args, model):
+def train(args, model, config):
     """ Train the model """
     if args.local_rank in [-1, 0]:
         os.makedirs(args.output_dir, exist_ok=True)
@@ -193,7 +193,7 @@ def train(args, model):
         for step, batch in enumerate(epoch_iterator):
             batch = tuple(t.to(args.device) for t in batch)
             x, y = batch
-            loss = model(x, y)
+            loss = model(x, y, fix_bit=config.fix_bit)
 
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
@@ -247,8 +247,9 @@ def main():
     parser.add_argument("--dataset", choices=["cifar10", "cifar100"], default="cifar10",
                         help="Which downstream task.")
     parser.add_argument("--model_type", choices=["ViT-B_16", "ViT-B_32", "ViT-L_16",
-                                                 "ViT-L_32", "ViT-H_14", "R50-ViT-B_16"],
-                        default="ViT-B_16",
+                                                 "ViT-L_32", "ViT-H_14", "R50-ViT-B_16",
+                                                 "ViT-L_32_8B","ViT-B_16_8B"],
+                        default="ViT-B_16_8B",
                         help="Which variant to use.")
     parser.add_argument("--pretrained_dir", type=str, default="checkpoint/ViT-B_16.npz",
                         help="Where to search for pretrained ViT models.")
@@ -318,10 +319,10 @@ def main():
     set_seed(args)
 
     # Model & Tokenizer Setup
-    args, model = setup(args)
+    args, model, config = setup(args)
 
     # Training
-    train(args, model)
+    train(args, model, config)
 
 
 if __name__ == "__main__":
