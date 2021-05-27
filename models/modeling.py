@@ -6,6 +6,7 @@ from __future__ import print_function
 import copy
 import logging
 import math
+import sys 
 
 from os.path import join as pjoin
 
@@ -13,13 +14,17 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from torch.nn import CrossEntropyLoss, Dropout, Softmax, Linear, Conv2d, LayerNorm
+from torch.nn import CrossEntropyLoss, Dropout, Softmax, Conv2d, LayerNorm
 from torch.nn.modules.utils import _pair
 from scipy import ndimage
 
 import models.configs as configs
 
 from .modeling_resnet import ResNetV2
+
+from .quantize import QLinear 
+
+Linear = QLinear 
 
 
 logger = logging.getLogger(__name__)
@@ -72,10 +77,10 @@ class Attention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states):
-        mixed_query_layer = self.query(hidden_states)
-        mixed_key_layer = self.key(hidden_states)
-        mixed_value_layer = self.value(hidden_states)
+    def forward(self, hidden_states, fix_bit=None):
+        mixed_query_layer = self.query(hidden_states, fix_bit=fix_bit)
+        mixed_key_layer = self.key(hidden_states, fix_bit=fix_bit)
+        mixed_value_layer = self.value(hidden_states, fix_bit=fix_bit)
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
         key_layer = self.transpose_for_scores(mixed_key_layer)
@@ -91,7 +96,7 @@ class Attention(nn.Module):
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
-        attention_output = self.out(context_layer)
+        attention_output = self.out(context_layer, fix_bit=fix_bit)
         attention_output = self.proj_dropout(attention_output)
         return attention_output, weights
 
@@ -112,11 +117,11 @@ class Mlp(nn.Module):
         nn.init.normal_(self.fc1.bias, std=1e-6)
         nn.init.normal_(self.fc2.bias, std=1e-6)
 
-    def forward(self, x):
-        x = self.fc1(x)
+    def forward(self, x, fix_bit=None):
+        x = self.fc1(x, fix_bit=fix_bit)
         x = self.act_fn(x)
         x = self.dropout(x)
-        x = self.fc2(x)
+        x = self.fc2(x, fix_bit=fix_bit)
         x = self.dropout(x)
         return x
 
@@ -140,9 +145,12 @@ class Embeddings(nn.Module):
             self.hybrid = False
 
         if self.hybrid:
+            print('not support hybird for now')
+            sys.exit(0)
             self.hybrid_model = ResNetV2(block_units=config.resnet.num_layers,
                                          width_factor=config.resnet.width_factor)
             in_channels = self.hybrid_model.width * 16
+        # patch embedding is not quantized 
         self.patch_embeddings = Conv2d(in_channels=in_channels,
                                        out_channels=config.hidden_size,
                                        kernel_size=patch_size,
@@ -177,15 +185,15 @@ class Block(nn.Module):
         self.ffn = Mlp(config)
         self.attn = Attention(config, vis)
 
-    def forward(self, x):
+    def forward(self, x, fix_bit=None):
         h = x
-        x = self.attention_norm(x)
+        x = self.attention_norm(x,fix_bit=fix_bit)
         x, weights = self.attn(x)
         x = x + h
 
         h = x
         x = self.ffn_norm(x)
-        x = self.ffn(x)
+        x = self.ffn(x, fix_bit=fix_bit)
         x = x + h
         return x, weights
 
@@ -237,10 +245,10 @@ class Encoder(nn.Module):
             layer = Block(config, vis)
             self.layer.append(copy.deepcopy(layer))
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states,, fix_bit=None):
         attn_weights = []
         for layer_block in self.layer:
-            hidden_states, weights = layer_block(hidden_states)
+            hidden_states, weights = layer_block(hidden_states, fix_bit=fix_bit)
             if self.vis:
                 attn_weights.append(weights)
         encoded = self.encoder_norm(hidden_states)
@@ -253,9 +261,9 @@ class Transformer(nn.Module):
         self.embeddings = Embeddings(config, img_size=img_size)
         self.encoder = Encoder(config, vis)
 
-    def forward(self, input_ids):
+    def forward(self, input_ids, fix_bit=None):
         embedding_output = self.embeddings(input_ids)
-        encoded, attn_weights = self.encoder(embedding_output)
+        encoded, attn_weights = self.encoder(embedding_output, fix_bit=fix_bit)
         return encoded, attn_weights
 
 
@@ -267,10 +275,11 @@ class VisionTransformer(nn.Module):
         self.classifier = config.classifier
 
         self.transformer = Transformer(config, img_size, vis)
-        self.head = Linear(config.hidden_size, num_classes)
+        # last conv layer use fc 
+        self.head = nn.Linear(config.hidden_size, num_classes)
 
-    def forward(self, x, labels=None):
-        x, attn_weights = self.transformer(x)
+    def forward(self, x, labels=None,, fix_bit=None):
+        x, attn_weights = self.transformer(x,, fix_bit=fix_bit)
         logits = self.head(x[:, 0])
 
         if labels is not None:
@@ -344,4 +353,5 @@ CONFIGS = {
     'ViT-H_14': configs.get_h14_config(),
     'R50-ViT-B_16': configs.get_r50_b16_config(),
     'testing': configs.get_testing(),
+    'ViT-L-32-8B': configs.get_l32_8bit_config(),
 }

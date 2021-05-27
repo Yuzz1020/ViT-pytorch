@@ -87,6 +87,12 @@ def get_l32_config():
     config.patches.size = (32, 32)
     return config
 
+def get_l32_8bit_config():
+    config = get_l32_config()
+    config.fix_bit = 8
+    config.quant_opt=None
+    config.target_flops_ratio = 1 
+    return config 
 
 def get_h14_config():
     """Returns the ViT-L/16 configuration."""
