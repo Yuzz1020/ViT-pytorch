@@ -36,7 +36,7 @@ def calculate_qparams(x, num_bits, flatten_dims=_DEFAULT_FLATTEN, reduce_dim=0, 
                 min_values = min_values.min(reduce_dim, keepdim=keepdim)[0]
                 max_values = max_values.max(reduce_dim, keepdim=keepdim)[0]
         # TODO: re-add true zero computation
-        range_values = max_values - min_values
+        range_values = max_values - min_values + 1e-6
         return QParams(range=range_values, zero_point=min_values,
                        num_bits=num_bits)
 
@@ -267,7 +267,6 @@ class QConv2d(nn.Conv2d):
         elif fix_bit is None:
             
             if num_bits_weight == 0:
-                print('running with unexpected FP')
                 return F.conv2d(input, self.weight, self.bias, self.stride,
                             self.padding, self.dilation, self.groups)
             
@@ -425,7 +424,6 @@ class QLinear(nn.Linear):
                 return output
 
         else:
-            print('running with fix {} bit'.format(fix_bit))
             num_bits = fix_bit
             num_bits_weight = fix_bit
 
